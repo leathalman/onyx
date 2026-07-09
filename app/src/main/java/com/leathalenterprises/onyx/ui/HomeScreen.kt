@@ -1,5 +1,6 @@
 package com.leathalenterprises.onyx.ui
 
+import android.content.ComponentName
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.VerticalPager
@@ -32,6 +32,8 @@ import kotlinx.coroutines.delay
 import java.util.Date
 
 private const val APPS_PER_PAGE = 7
+private const val HINT_STEP_MS = 750L
+private const val HINT_WAVE_PAUSE_MS = 750L
 
 val HomeLabelStyle = TextStyle(
     color = Color.White,
@@ -43,30 +45,33 @@ val HomeLabelStyle = TextStyle(
 private val ClockStyle = TextStyle(
     color = Color.White,
     fontFamily = OnyxFontFamily,
-    fontSize = 18.sp,
-    letterSpacing = 1.sp,
+    fontSize = 20.sp,
 )
 
-/** One row on the home screen; a null [app] is the built-in Onyx entry. */
-private data class HomeEntry(val label: String, val app: ConfiguredApp?)
+private val SettingsButtonStyle = TextStyle(
+    color = Color.White,
+    fontFamily = OnyxFontFamily,
+    fontSize = 20.sp,
+)
 
 /**
- * The home screen: a clock up top and pages of up to [APPS_PER_PAGE] centered
- * app labels, swiped horizontally, with a page indicator on the right edge.
- * An "Onyx" entry is always appended after the configured apps and opens
- * settings. [apps] is null while the saved configuration is still loading.
+ * The home screen: a clock up top, pages of up to [APPS_PER_PAGE] centered
+ * app labels sorted A-Z and swiped vertically, a page indicator on the right
+ * edge, and a fixed "onyx" button at the bottom right that opens settings
+ * (mirroring the picker's back button). [apps] is null while the saved
+ * configuration is still loading.
  */
 @Composable
 fun HomeScreen(
     apps: List<ConfiguredApp>?,
+    pending: Set<ComponentName>,
     onLaunch: (ConfiguredApp) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     if (apps == null) return
 
     val pages = remember(apps) {
-        (apps.map { HomeEntry(it.label, it) } + HomeEntry("Onyx", null))
-            .chunked(APPS_PER_PAGE)
+        apps.sortedBy { it.label.lowercase() }.chunked(APPS_PER_PAGE)
     }
     val pagerState = rememberPagerState { pages.size }
 
@@ -77,26 +82,32 @@ fun HomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
-                    pages[page].forEach { entry ->
-                        OnyxLabel(
-                            text = entry.label,
+                    pages[page].forEach { app ->
+                        FuzzLabel(
+                            text = app.label.lowercase(),
+                            fuzzing = app.component in pending,
                             style = HomeLabelStyle,
-                            onClick = { entry.app?.let(onLaunch) ?: onOpenSettings() },
+                            onClick = { onLaunch(app) },
                         )
                     }
                 }
             }
         }
-        // Drawn after the pager so pages scroll underneath it, not through it.
-        Box(
+        // Corner elements are drawn after the pager (with black backing) so
+        // pages scroll underneath them, not through them. The clock mirrors
+        // the onyx/back button treatment in the opposite corner.
+        Clock(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-            Clock(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp))
-        }
+                .align(Alignment.BottomStart)
+                .padding(start = 24.dp, bottom = 32.dp)
+                .background(Color.Black)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+        )
+        SettingsButton(
+            showHint = apps.isEmpty(),
+            onClick = onOpenSettings,
+            modifier = Modifier.align(Alignment.BottomEnd),
+        )
         if (pages.size > 1) {
             PageIndicator(
                 pageCount = pages.size,
@@ -109,14 +120,50 @@ fun HomeScreen(
     }
 }
 
+/**
+ * The fixed settings button. On a fresh install (no apps configured yet) the
+ * home screen is otherwise blank, so chevrons march toward the word —
+ * `> onyx`, `>> onyx`, `>>> onyx` — echoing the picker's `< back` grammar.
+ * Once anything is configured it renders as plain "onyx".
+ */
+@Composable
+private fun SettingsButton(
+    showHint: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var chevrons by remember { mutableStateOf(1) }
+    if (showHint) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                chevrons = 1
+                delay(HINT_STEP_MS)
+                chevrons = 2
+                delay(HINT_STEP_MS)
+                chevrons = 3
+                delay(HINT_STEP_MS + HINT_WAVE_PAUSE_MS)
+            }
+        }
+    }
+    BasicText(
+        text = if (showHint) ">".repeat(chevrons) + " onyx" else "onyx",
+        style = SettingsButtonStyle,
+        modifier = modifier
+            .padding(end = 24.dp, bottom = 32.dp)
+            .background(Color.Black)
+            .pressDimClickable(onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    )
+}
+
 @Composable
 private fun Clock(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val formatter = remember { DateFormat.getTimeFormat(context) }
-    var time by remember { mutableStateOf(formatter.format(Date())) }
+    var time by remember { mutableStateOf(formatter.format(Date()).lowercase()) }
     LaunchedEffect(Unit) {
         while (true) {
-            time = formatter.format(Date())
+            time = formatter.format(Date()).lowercase()
             delay(60_000L - (System.currentTimeMillis() % 60_000L) + 100)
         }
     }
@@ -137,16 +184,4 @@ private fun PageIndicator(pageCount: Int, current: Int, modifier: Modifier = Mod
             )
         }
     }
-}
-
-/** A tappable text label that dims while pressed. */
-@Composable
-fun OnyxLabel(text: String, style: TextStyle, onClick: () -> Unit) {
-    BasicText(
-        text = text,
-        style = style,
-        modifier = Modifier
-            .pressDimClickable(onClick)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-    )
 }

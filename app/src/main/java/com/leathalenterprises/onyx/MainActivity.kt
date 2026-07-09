@@ -22,8 +22,12 @@ import androidx.compose.ui.graphics.Color
 import com.leathalenterprises.onyx.data.AppsRepository
 import com.leathalenterprises.onyx.data.ConfiguredApp
 import com.leathalenterprises.onyx.data.ConfiguredAppsStore
+import com.leathalenterprises.onyx.data.LabelerCoordinator
+import com.leathalenterprises.onyx.data.StubLabeler
 import com.leathalenterprises.onyx.ui.HomeScreen
 import com.leathalenterprises.onyx.ui.PickerScreen
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
 import android.graphics.Color as AndroidColor
 
 enum class Screen { Home, Picker }
@@ -31,6 +35,7 @@ enum class Screen { Home, Picker }
 class MainActivity : ComponentActivity() {
 
     private var screen by mutableStateOf(Screen.Home)
+    private val scope = MainScope()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,14 +45,29 @@ class MainActivity : ComponentActivity() {
         )
         val repository = AppsRepository(applicationContext)
         val store = ConfiguredAppsStore(applicationContext)
+        // FIXME(gemma): replace StubLabeler with
+        // GemmaLabeler("<path to gemma3 .task bundle>") once the model ships.
+        val coordinator = LabelerCoordinator(
+            context = applicationContext,
+            store = store,
+            repository = repository,
+            labeler = StubLabeler(),
+            scope = scope,
+        ).also { it.start() }
         setContent {
             OnyxApp(
                 screen = screen,
                 repository = repository,
                 store = store,
+                coordinator = coordinator,
                 onScreenChange = { screen = it },
             )
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
     }
 
     // The home button re-delivers the HOME intent to this singleTask
@@ -63,10 +83,12 @@ private fun OnyxApp(
     screen: Screen,
     repository: AppsRepository,
     store: ConfiguredAppsStore,
+    coordinator: LabelerCoordinator,
     onScreenChange: (Screen) -> Unit,
 ) {
     val configured by store.apps.collectAsState(initial = null)
     val installed by repository.installedApps.collectAsState(initial = emptyList())
+    val pending by coordinator.pending.collectAsState()
 
     // Hide configured apps that have since been uninstalled (once the
     // installed list has actually loaded).
@@ -89,6 +111,7 @@ private fun OnyxApp(
             when (target) {
                 Screen.Home -> HomeScreen(
                     apps = visible,
+                    pending = pending,
                     onLaunch = { repository.launch(it.component) },
                     onOpenSettings = { onScreenChange(Screen.Picker) },
                 )

@@ -38,6 +38,8 @@ android {
 }
 
 dependencies {
+    // FIXME(gemma): add on real wifi for on-device labeling (see GemmaLabeler):
+    // implementation("com.google.mediapipe:tasks-genai:0.10.24")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)

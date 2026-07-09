@@ -87,7 +87,7 @@ fun PickerScreen(
                     label = "selection",
                 )
                 BasicText(
-                    text = app.label,
+                    text = app.label.lowercase(),
                     style = RowStyle.copy(color = color),
                     modifier = Modifier
                         .fillMaxWidth()
