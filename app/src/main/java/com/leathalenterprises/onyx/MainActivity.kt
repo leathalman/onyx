@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,25 +81,31 @@ private fun OnyxApp(
             .background(Color.Black)
             .systemBarsPadding(),
     ) {
-        when (screen) {
-            Screen.Home -> HomeScreen(
-                apps = visible,
-                onLaunch = { repository.launch(it.component) },
-                onOpenPicker = { onScreenChange(Screen.Picker) },
-            )
-            Screen.Picker -> PickerScreen(
-                installed = installed,
-                configured = configured.orEmpty(),
-                onToggle = { app ->
-                    val current = configured.orEmpty()
-                    val without = current.filterNot { it.component == app.component }
-                    val updated =
-                        if (without.size < current.size) without
-                        else current + ConfiguredApp(app.label, app.component)
-                    store.save(updated)
-                },
-                onClose = { onScreenChange(Screen.Home) },
-            )
+        Crossfade(
+            targetState = screen,
+            animationSpec = tween(durationMillis = 180),
+            label = "screen",
+        ) { target ->
+            when (target) {
+                Screen.Home -> HomeScreen(
+                    apps = visible,
+                    onLaunch = { repository.launch(it.component) },
+                    onOpenSettings = { onScreenChange(Screen.Picker) },
+                )
+                Screen.Picker -> PickerScreen(
+                    installed = installed,
+                    configured = configured.orEmpty(),
+                    onToggle = { app ->
+                        val currentApps = configured.orEmpty()
+                        val without = currentApps.filterNot { it.component == app.component }
+                        val updated =
+                            if (without.size < currentApps.size) without
+                            else currentApps + ConfiguredApp(app.label, app.component)
+                        store.save(updated)
+                    },
+                    onClose = { onScreenChange(Screen.Home) },
+                )
+            }
         }
     }
 }

@@ -59,6 +59,11 @@ class AppsRepository(context: Context) {
     }.conflate()
 
     fun launch(component: ComponentName) {
-        launcherApps.startMainActivity(component, Process.myUserHandle(), null, null)
+        // The app may have been uninstalled between render and tap; a home
+        // screen should never crash over that.
+        try {
+            launcherApps.startMainActivity(component, Process.myUserHandle(), null, null)
+        } catch (_: Exception) {
+        }
     }
 }
