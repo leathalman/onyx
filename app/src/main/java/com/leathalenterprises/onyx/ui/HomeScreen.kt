@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.VerticalPager
@@ -93,16 +94,17 @@ fun HomeScreen(
                 }
             }
         }
-        // Corner elements are drawn after the pager (with black backing) so
-        // pages scroll underneath them, not through them. The clock mirrors
-        // the onyx/back button treatment in the opposite corner.
-        Clock(
+        // Overlays are drawn after the pager (with black backing) so pages
+        // scroll underneath them, not through them.
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 24.dp, bottom = 32.dp)
-                .background(Color.Black)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-        )
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            Clock(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp))
+        }
         SettingsButton(
             showHint = apps.isEmpty(),
             onClick = onOpenSettings,
