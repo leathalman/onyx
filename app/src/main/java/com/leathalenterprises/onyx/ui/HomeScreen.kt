@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -55,6 +56,12 @@ private val SettingsButtonStyle = TextStyle(
     fontSize = 26.sp,
 )
 
+private val StatusStyle = TextStyle(
+    color = OnyxChrome,
+    fontFamily = OnyxFontFamily,
+    fontSize = 26.sp,
+)
+
 /**
  * The home screen: a clock up top, pages of up to [APPS_PER_PAGE] centered
  * app labels sorted A-Z and swiped vertically, a page indicator on the right
@@ -66,6 +73,8 @@ private val SettingsButtonStyle = TextStyle(
 fun HomeScreen(
     apps: List<ConfiguredApp>?,
     resetSignal: Int,
+    battery: Int?,
+    connectivity: String?,
     onLaunch: (ConfiguredApp) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -114,6 +123,13 @@ fun HomeScreen(
         ) {
             Clock(modifier = Modifier.padding(top = 24.dp, bottom = 16.dp))
         }
+        if (battery != null) {
+            StatusReadout(
+                battery = battery,
+                connectivity = connectivity,
+                modifier = Modifier.align(Alignment.BottomStart),
+            )
+        }
         SettingsButton(
             showHint = apps.isEmpty(),
             onClick = onOpenSettings,
@@ -127,6 +143,36 @@ fun HomeScreen(
                     .align(Alignment.CenterEnd)
                     .padding(end = 16.dp),
             )
+        }
+    }
+}
+
+/**
+ * Battery percentage and connectivity word, separated by a drawn dot (the
+ * font's own middle dot is a single pixel — too weak next to these glyphs).
+ */
+@Composable
+private fun StatusReadout(
+    battery: Int,
+    connectivity: String?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .padding(start = 24.dp, bottom = 32.dp)
+            .background(Color.Black)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        BasicText(text = "$battery%", style = StatusStyle)
+        if (connectivity != null) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .background(OnyxChrome, CircleShape),
+            )
+            BasicText(text = connectivity, style = StatusStyle)
         }
     }
 }
@@ -146,7 +192,7 @@ private fun AppLabel(text: String, onClick: () -> Unit) {
 /**
  * The fixed settings button. On a fresh install (no apps configured yet) the
  * home screen is otherwise blank, so chevrons march toward the word —
- * `> onyx`, `>> onyx`, `>>> onyx` — echoing the picker's `< back` grammar.
+ * "> onyx", ">> onyx", ">>> onyx" — echoing the picker's "< back" grammar.
  * Once anything is configured it renders as plain "onyx".
  */
 @Composable
