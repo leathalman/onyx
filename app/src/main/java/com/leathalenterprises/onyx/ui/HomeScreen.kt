@@ -1,6 +1,5 @@
 package com.leathalenterprises.onyx.ui
 
-import android.content.ComponentName
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,7 +64,6 @@ private val SettingsButtonStyle = TextStyle(
 @Composable
 fun HomeScreen(
     apps: List<ConfiguredApp>?,
-    pending: Set<ComponentName>,
     onLaunch: (ConfiguredApp) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -84,10 +82,8 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     pages[page].forEach { app ->
-                        FuzzLabel(
+                        AppLabel(
                             text = app.label.lowercase(),
-                            fuzzing = app.component in pending,
-                            style = HomeLabelStyle,
                             onClick = { onLaunch(app) },
                         )
                     }
@@ -120,6 +116,18 @@ fun HomeScreen(
             )
         }
     }
+}
+
+/** A tappable home-screen app label that dims while pressed. */
+@Composable
+private fun AppLabel(text: String, onClick: () -> Unit) {
+    BasicText(
+        text = text,
+        style = HomeLabelStyle,
+        modifier = Modifier
+            .pressDimClickable(onClick)
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+    )
 }
 
 /**
