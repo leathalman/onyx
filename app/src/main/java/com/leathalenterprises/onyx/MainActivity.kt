@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ enum class Screen { Home, Picker }
 class MainActivity : ComponentActivity() {
 
     private var screen by mutableStateOf(Screen.Home)
+    private var homeResetSignal by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +45,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             OnyxApp(
                 screen = screen,
+                homeResetSignal = homeResetSignal,
                 repository = repository,
                 store = store,
                 onScreenChange = { screen = it },
@@ -50,17 +53,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // The home button re-delivers the HOME intent to this singleTask
-    // activity; snap back to the home screen.
+    // The home gesture re-delivers the HOME intent to this singleTask
+    // activity; snap back to the home screen's first page.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         screen = Screen.Home
+        homeResetSignal++
     }
 }
 
 @Composable
 private fun OnyxApp(
     screen: Screen,
+    homeResetSignal: Int,
     repository: AppsRepository,
     store: ConfiguredAppsStore,
     onScreenChange: (Screen) -> Unit,
@@ -93,6 +98,7 @@ private fun OnyxApp(
             when (target) {
                 Screen.Home -> HomeScreen(
                     apps = visible,
+                    resetSignal = homeResetSignal,
                     onLaunch = { repository.launch(it.component) },
                     onOpenSettings = { onScreenChange(Screen.Picker) },
                 )

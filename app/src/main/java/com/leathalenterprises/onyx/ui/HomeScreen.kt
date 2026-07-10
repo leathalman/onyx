@@ -1,6 +1,7 @@
 package com.leathalenterprises.onyx.ui
 
 import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -43,15 +44,15 @@ val HomeLabelStyle = TextStyle(
 )
 
 private val ClockStyle = TextStyle(
-    color = Color.White,
+    color = OnyxChrome,
     fontFamily = OnyxFontFamily,
-    fontSize = 16.sp,
+    fontSize = 26.sp,
 )
 
 private val SettingsButtonStyle = TextStyle(
-    color = Color.White,
+    color = OnyxChrome,
     fontFamily = OnyxFontFamily,
-    fontSize = 20.sp,
+    fontSize = 26.sp,
 )
 
 /**
@@ -64,15 +65,27 @@ private val SettingsButtonStyle = TextStyle(
 @Composable
 fun HomeScreen(
     apps: List<ConfiguredApp>?,
+    resetSignal: Int,
     onLaunch: (ConfiguredApp) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     if (apps == null) return
 
+    // Swallow the system back gesture: left/right edge swipes must do
+    // nothing on a home screen. (Android ignores back on the *default*
+    // launcher anyway; this makes Onyx behave the same before it is one.)
+    BackHandler {}
+
     val pages = remember(apps) {
         apps.sortedBy { it.label.lowercase() }.chunked(APPS_PER_PAGE)
     }
     val pagerState = rememberPagerState { pages.size }
+
+    // The home gesture means "take me to the top": snap to the first page
+    // whenever the HOME intent is re-delivered.
+    LaunchedEffect(resetSignal) {
+        pagerState.scrollToPage(0)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
@@ -189,7 +202,7 @@ private fun PageIndicator(pageCount: Int, current: Int, modifier: Modifier = Mod
                 modifier = if (page == current) {
                     dot.background(Color.White, CircleShape)
                 } else {
-                    dot.border(1.dp, Color(0xFF8A8A8A), CircleShape)
+                    dot.border(1.dp, OnyxOff, CircleShape)
                 },
             )
         }

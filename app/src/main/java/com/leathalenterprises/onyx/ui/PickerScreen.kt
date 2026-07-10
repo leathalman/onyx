@@ -25,16 +25,17 @@ import com.leathalenterprises.onyx.data.ConfiguredApp
 import com.leathalenterprises.onyx.data.InstalledApp
 
 private val SelectedColor = Color.White
-private val UnselectedColor = Color(0xFF6E6E6E)
+private val UnselectedColor = OnyxOff
 
 private val BackStyle = TextStyle(
-    color = Color.White,
+    color = OnyxChrome,
     fontFamily = OnyxFontFamily,
-    fontSize = 20.sp,
+    fontSize = 26.sp,
 )
 
 private val HeaderStyle = TextStyle(
-    color = UnselectedColor,
+    // Chrome, not an "off" state: gray is reserved for unselected rows.
+    color = OnyxChrome,
     fontFamily = OnyxFontFamily,
     fontSize = 14.sp,
     letterSpacing = 2.sp,
