@@ -3,9 +3,9 @@ package com.leathalenterprises.onyx.data
 import kotlinx.coroutines.delay
 
 /**
- * FIXME(gemma): delete once GemmaLabeler runs a real model. This stands in
- * for it today: fakes inference latency (so the fuzz animation is feelable
- * on the emulator) and labels by keyword lookup instead of a model.
+ * Fallback labeler for devices without the Gemma model file (emulators,
+ * fresh installs): keyword lookup instead of a model, plus fake latency so
+ * the fuzz animation still reads correctly.
  */
 class StubLabeler : Labeler {
 

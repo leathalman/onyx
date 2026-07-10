@@ -22,8 +22,10 @@ import androidx.compose.ui.graphics.Color
 import com.leathalenterprises.onyx.data.AppsRepository
 import com.leathalenterprises.onyx.data.ConfiguredApp
 import com.leathalenterprises.onyx.data.ConfiguredAppsStore
+import com.leathalenterprises.onyx.data.GemmaLabeler
 import com.leathalenterprises.onyx.data.LabelerCoordinator
 import com.leathalenterprises.onyx.data.StubLabeler
+import java.io.File
 import com.leathalenterprises.onyx.ui.HomeScreen
 import com.leathalenterprises.onyx.ui.PickerScreen
 import kotlinx.coroutines.MainScope
@@ -31,6 +33,12 @@ import kotlinx.coroutines.cancel
 import android.graphics.Color as AndroidColor
 
 enum class Screen { Home, Picker }
+
+/**
+ * Gemma bundle inside filesDir; see GemmaLabeler docs for how to load it.
+ * Name is model-agnostic so swapping model sizes never touches code.
+ */
+private const val MODEL_FILE_NAME = "gemma3.task"
 
 class MainActivity : ComponentActivity() {
 
@@ -45,13 +53,17 @@ class MainActivity : ComponentActivity() {
         )
         val repository = AppsRepository(applicationContext)
         val store = ConfiguredAppsStore(applicationContext)
-        // FIXME(gemma): replace StubLabeler with
-        // GemmaLabeler("<path to gemma3 .task bundle>") once the model ships.
+        // Real model when its file is present; keyword stub otherwise (so
+        // the emulator and model-less devices still get basic labels).
+        val modelFile = File(filesDir, MODEL_FILE_NAME)
+        val labeler =
+            if (modelFile.exists()) GemmaLabeler(applicationContext, modelFile.path)
+            else StubLabeler()
         val coordinator = LabelerCoordinator(
             context = applicationContext,
             store = store,
             repository = repository,
-            labeler = StubLabeler(),
+            labeler = labeler,
             scope = scope,
         ).also { it.start() }
         setContent {

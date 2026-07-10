@@ -18,11 +18,12 @@ private const val FIELD_SEPARATOR = "\t"
 private const val ENTRY_SEPARATOR = "\n"
 
 /**
- * Persists the ordered list of home-screen apps.
+ * Persists the selected apps, their (possibly LLM-generated) labels, and the
+ * set hash those labels cover.
  *
- * FIXME(airplane-wifi): this uses SharedPreferences only because
- * androidx.datastore couldn't be downloaded on this network. On normal wifi,
- * consider migrating to Preferences DataStore (the original design).
+ * Deliberately SharedPreferences rather than DataStore: the data is a few
+ * hundred bytes, and saveLabeled() relies on multi-key atomic commits, which
+ * prefs gives us for free.
  */
 class ConfiguredAppsStore(context: Context) {
 

@@ -3,7 +3,6 @@ package com.leathalenterprises.onyx
 import com.leathalenterprises.onyx.data.GemmaLabeler
 import com.leathalenterprises.onyx.data.LabelRequest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,73 +10,73 @@ import org.junit.Test
 class GemmaLabelerTest {
 
     @Test
-    fun `prompt lists every app with package and name`() {
+    fun `prompt names the app and its package`() {
         val prompt = GemmaLabeler.buildPrompt(
-            listOf(
-                LabelRequest("com.ubercab", "Uber", null, null),
-                LabelRequest("com.android.vending", "Google Play Store", null, null),
-            ),
+            LabelRequest("com.android.vending", "Google Play Store", null, null),
         )
-        assertTrue(prompt.contains("package=com.ubercab"))
-        assertTrue(prompt.contains("name=\"Uber\""))
-        assertTrue(prompt.contains("package=com.android.vending"))
-        assertTrue(prompt.contains("name=\"Google Play Store\""))
+        assertTrue(prompt.contains("\"Google Play Store\""))
+        assertTrue(prompt.contains("com.android.vending"))
     }
 
     @Test
-    fun `prompt includes category and role hints when known`() {
+    fun `prompt includes the role when known`() {
         val prompt = GemmaLabeler.buildPrompt(
-            listOf(
-                LabelRequest(
-                    packageName = "com.android.chrome",
-                    originalLabel = "Chrome",
-                    category = "PRODUCTIVITY",
-                    role = "default web browser",
-                ),
-            ),
+            LabelRequest("com.android.chrome", "Chrome", null, "default web browser"),
         )
-        assertTrue(prompt.contains("category=PRODUCTIVITY"))
-        assertTrue(prompt.contains("role=\"default web browser\""))
+        assertTrue(prompt.contains("it is the default web browser"))
     }
 
     @Test
-    fun `prompt states the uniqueness and brand-name rules`() {
+    fun `prompt demands one word and offers the unknown sentinel`() {
         val prompt = GemmaLabeler.buildPrompt(
-            listOf(LabelRequest("com.ubercab", "Uber", null, null)),
+            LabelRequest("com.example.foo", "Foo", null, null),
         )
-        assertTrue(prompt.contains("unique", ignoreCase = true))
-        assertTrue(prompt.contains("brand", ignoreCase = true))
-        assertTrue(prompt.contains("unchanged", ignoreCase = true))
+        assertTrue(prompt.contains("one word only", ignoreCase = true))
+        assertTrue(prompt.contains("answer: Unknown"))
     }
 
     @Test
-    fun `parses a plain json response`() {
-        val parsed = GemmaLabeler.parseResponse(
-            """{"com.ubercab": "Uber", "com.android.vending": "Store"}""",
+    fun `prompt includes the category when known`() {
+        val prompt = GemmaLabeler.buildPrompt(
+            LabelRequest("com.ubercab", "Uber", "MAPS", null),
         )
-        assertEquals(
-            mapOf("com.ubercab" to "Uber", "com.android.vending" to "Store"),
-            parsed,
-        )
+        assertTrue(prompt.contains("its category is MAPS"))
     }
 
     @Test
-    fun `parses json wrapped in prose and code fences`() {
-        val parsed = GemmaLabeler.parseResponse(
-            """
-            Sure! Here are the labels:
-            ```json
-            {"com.android.vending": "Store"}
-            ```
-            """.trimIndent(),
-        )
-        assertEquals(mapOf("com.android.vending" to "Store"), parsed)
+    fun `system roles map to deterministic labels`() {
+        assertEquals("Messages", GemmaLabeler.ROLE_LABELS["default messaging app"])
+        assertEquals("Phone", GemmaLabeler.ROLE_LABELS["default phone app"])
+        assertEquals("Browser", GemmaLabeler.ROLE_LABELS["default web browser"])
     }
 
     @Test
-    fun `garbage output returns null`() {
-        assertNull(GemmaLabeler.parseResponse("I cannot label these apps."))
-        assertNull(GemmaLabeler.parseResponse(""))
-        assertNull(GemmaLabeler.parseResponse("{}"))
+    fun `plain answers pass through`() {
+        assertEquals("Store", GemmaLabeler.extractLabel("Store"))
+    }
+
+    @Test
+    fun `fences quotes and punctuation are stripped`() {
+        assertEquals("Store", GemmaLabeler.extractLabel("```\nStore\n```"))
+        assertEquals("Store", GemmaLabeler.extractLabel("\"Store\"."))
+        assertEquals("Store", GemmaLabeler.extractLabel("  Store!\n"))
+    }
+
+    @Test
+    fun `first non-empty line wins`() {
+        assertEquals("Browser", GemmaLabeler.extractLabel("\n\nBrowser\nBecause it browses."))
+    }
+
+    @Test
+    fun `multi-word answers are preserved for the validator to reject`() {
+        // The validator turns these into the app's real name; extraction
+        // must not "help" by picking one of the words.
+        assertEquals("Web Browser", GemmaLabeler.extractLabel("Web Browser"))
+    }
+
+    @Test
+    fun `empty output becomes empty string`() {
+        assertEquals("", GemmaLabeler.extractLabel(""))
+        assertEquals("", GemmaLabeler.extractLabel("```json\n```"))
     }
 }

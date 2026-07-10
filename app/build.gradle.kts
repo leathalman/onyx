@@ -6,9 +6,7 @@ plugins {
 android {
     namespace = "com.leathalenterprises.onyx"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
 
     defaultConfig {
@@ -38,8 +36,7 @@ android {
 }
 
 dependencies {
-    // FIXME(gemma): add on real wifi for on-device labeling (see GemmaLabeler):
-    // implementation("com.google.mediapipe:tasks-genai:0.10.24")
+    implementation(libs.mediapipe.tasks.genai)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)

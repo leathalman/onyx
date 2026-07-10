@@ -1,92 +1,124 @@
 package com.leathalenterprises.onyx.data
 
+import android.content.Context
+import android.util.Log
+import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
 /**
- * On-device LLM labeler, to be backed by MediaPipe LLM Inference running a
- * Gemma 3 model (270M-it int4 to start; bump to 1B if labels are weak).
+ * On-device LLM labeler backed by MediaPipe LLM Inference running Gemma 3
+ * (1B-it int4; 270M could not follow instructions reliably).
  *
- * FIXME(gemma): inert until the real model is wired in. On real wifi:
- *  1. app/build.gradle.kts: implementation("com.google.mediapipe:tasks-genai:<latest>")
- *  2. Download the Gemma 3 270M-it int4 LiteRT `.task` bundle (Hugging Face,
- *     litert-community) into context.filesDir — or `adb push` to
- *     /data/local/tmp for development.
- *  3. Implement label() per the sketch below.
- *  4. Swap StubLabeler for this class in MainActivity.
- *  5. Un-@Ignore GemmaModelLabelingTest in androidTest and run it on-device.
+ * Asks one tiny question per app instead of one batch-JSON question for the
+ * set: small models answer "one word for what this app does" far more
+ * reliably than they emit structured mappings (observed failure modes of the
+ * batch approach: parroted few-shot examples, invented schemas, two-word
+ * labels, package fragments echoed into keys). Collisions between generic
+ * answers are handled deterministically by [LabelValidator], which reverts
+ * same-label apps to their brand names.
+ *
+ * The model file is not shipped in the APK. Get it onto the device with:
+ *   adb push gemma3-1b-it-int4.task /data/local/tmp/gemma3.task
+ *   adb shell run-as com.leathalenterprises.onyx sh -c \
+ *     'cp /data/local/tmp/gemma3.task files/'
+ * (or download it into context.filesDir at first run, someday.)
  */
 class GemmaLabeler(
-    @Suppress("unused") private val modelPath: String,
+    context: Context,
+    private val modelPath: String,
 ) : Labeler {
 
+    private val context = context.applicationContext
+
     override suspend fun label(requests: List<LabelRequest>): Map<String, String>? {
-        // FIXME(gemma): the real implementation, roughly:
-        //
-        // val options = LlmInference.LlmInferenceOptions.builder()
-        //     .setModelPath(modelPath)
-        //     .setMaxTokens(256)
-        //     .build()
-        // val llm = LlmInference.createFromOptions(context, options)
-        // val raw = withContext(Dispatchers.Default) {
-        //     llm.generateResponse(buildPrompt(requests))
-        // }
-        // llm.close()
-        // return parseResponse(raw)
-        //
-        // Keep temperature at/near 0 (deterministic labels), and keep the
-        // LlmInference instance alive across the debounce window if warm
-        // starts matter (create when the picker opens, close when it exits).
-        return null
+        if (!File(modelPath).exists()) return null
+        // Apps holding a system role have a known function; label those
+        // deterministically and only ask the model about the rest.
+        val roleLabels = requests.mapNotNull { request ->
+            ROLE_LABELS[request.role]?.let { request.packageName to it }
+        }.toMap()
+        val unresolved = requests.filter { it.packageName !in roleLabels }
+        if (unresolved.isEmpty()) return roleLabels
+
+        return withContext(Dispatchers.Default) {
+            val options = LlmInference.LlmInferenceOptions.builder()
+                .setModelPath(modelPath)
+                .setMaxTokens(512)
+                .build()
+            LlmInference.createFromOptions(context, options).use { llm ->
+                roleLabels + unresolved.associate { request ->
+                    request.packageName to labelOne(llm, request)
+                }
+            }
+        }
+    }
+
+    private fun labelOne(llm: LlmInference, request: LabelRequest): String {
+        val sessionOptions = LlmInferenceSession.LlmInferenceSessionOptions.builder()
+            // Deterministic decoding: labels should never be creative, and
+            // greedy decoding makes same-function apps converge on the same
+            // word, which is what lets the validator catch collisions.
+            .setTemperature(0f)
+            .setTopK(1)
+            .build()
+        return LlmInferenceSession.createFromOptions(llm, sessionOptions).use { session ->
+            session.addQueryChunk(buildPrompt(request))
+            val raw = session.generateResponse()
+            Log.d(TAG, "${request.packageName} -> $raw")
+            val label = extractLabel(raw)
+            // "I don't know" answers become empty proposals, which the
+            // validator resolves to the app's real name.
+            if (label.equals(UNKNOWN, ignoreCase = true)) "" else label
+        }
     }
 
     companion object {
 
-        /**
-         * One batch prompt for the whole selected set, so the model can solve
-         * the collision problem (Uber + Lyft + Waymo) in one pass.
-         */
-        fun buildPrompt(requests: List<LabelRequest>): String = buildString {
+        private const val TAG = "GemmaLabeler"
+
+        /** Sentinel the model answers when it doesn't know the app. */
+        const val UNKNOWN = "Unknown"
+
+        /** Deterministic labels for apps holding a system role. */
+        val ROLE_LABELS: Map<String, String> = mapOf(
+            "default messaging app" to "Messages",
+            "default phone app" to "Phone",
+            "default web browser" to "Browser",
+        )
+
+        /** One question about one app, answerable with a single word. */
+        fun buildPrompt(request: LabelRequest): String = buildString {
+            append("What is the Android app \"")
+            append(request.originalLabel)
+            append("\" (package ")
+            append(request.packageName)
+            append(')')
+            request.role?.let { append("; it is the ").append(it) }
+            request.category?.let { append("; its category is ").append(it) }
+            appendLine(" used for?")
             appendLine(
-                "You assign short generic labels to smartphone apps for a " +
-                    "minimal text-only launcher."
+                "Good answers look like: Store, Messages, Browser, Music, " +
+                    "Mail, Photos, Maps, Camera, Ride, Notes, Weather, " +
+                    "Bank, or Fitness."
             )
-            appendLine("Rules:")
-            appendLine("- One word per label, at most 12 characters.")
-            appendLine(
-                "- Prefer a generic noun for what the app does, like " +
-                    "\"Store\", \"Messages\", or \"Browser\"."
-            )
-            appendLine(
-                "- Labels must be unique. If several apps do the same " +
-                    "thing, keep their brand names instead."
-            )
-            appendLine("- If you do not recognize an app, return its name unchanged.")
-            appendLine("Apps:")
-            requests.forEach { request ->
-                append("- package=").append(request.packageName)
-                append(" name=\"").append(request.originalLabel).append('"')
-                request.category?.let { append(" category=").append(it) }
-                request.role?.let { append(" role=\"").append(it).append('"') }
-                appendLine()
-            }
-            append(
-                "Answer with only a JSON object mapping each package name " +
-                    "to its label, and nothing else."
-            )
+            appendLine("If you are not sure what the app does, answer: $UNKNOWN")
+            append("Answer with one word only.")
         }
 
         /**
-         * Extracts a package-to-label map from raw model output. Tolerates
-         * prose or code fences around the JSON; returns null when nothing
-         * usable is present. Regex-based on purpose: keeps this parsable in
-         * plain JVM unit tests (org.json is stubbed out there) and immune to
-         * a small model's imperfect JSON.
+         * Cleans a model reply down to its answer: strips code fences,
+         * quotes, and trailing punctuation, and keeps the first line.
+         * Multi-word answers are returned as-is — the validator rejects
+         * them, falling back to the app's real name.
          */
-        fun parseResponse(raw: String): Map<String, String>? {
-            val body = raw.substringAfter('{', "").substringBeforeLast('}', "")
-            if (body.isEmpty()) return null
-            return Regex("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"")
-                .findAll(body)
-                .associate { it.groupValues[1] to it.groupValues[2] }
-                .ifEmpty { null }
-        }
+        fun extractLabel(raw: String): String =
+            raw.lineSequence()
+                .map { it.trim().trim('`', '"', '\'', '*', ' ') }
+                .firstOrNull { it.isNotEmpty() && it != "json" }
+                ?.trimEnd('.', '!', ',')
+                ?: ""
     }
 }

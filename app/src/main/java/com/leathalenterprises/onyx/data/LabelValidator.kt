@@ -23,9 +23,10 @@ object LabelValidator {
         }
 
         // Two apps may not share a label: generic collisions ("Rides" for
-        // both Uber and Lyft) revert to brand names.
+        // both Uber and Lyft) revert to brand names. Compared in canonical
+        // form so near-misses like "Map"/"Maps" still count as collisions.
         val collisions = cleaned.values
-            .groupingBy { it.lowercase() }
+            .groupingBy { canonical(it) }
             .eachCount()
             .filterValues { it > 1 }
             .keys
@@ -33,13 +34,16 @@ object LabelValidator {
         return requests.associate { request ->
             val label = cleaned.getValue(request.packageName)
             request.packageName to
-                if (label.lowercase() in collisions && label != request.originalLabel) {
+                if (canonical(label) in collisions && label != request.originalLabel) {
                     request.originalLabel
                 } else {
                     label
                 }
         }
     }
+
+    private fun canonical(label: String): String =
+        label.lowercase().removeSuffix("s")
 
     private fun isValid(label: String): Boolean =
         label.isNotEmpty() &&

@@ -46,7 +46,7 @@ val HomeLabelStyle = TextStyle(
 private val ClockStyle = TextStyle(
     color = Color.White,
     fontFamily = OnyxFontFamily,
-    fontSize = 20.sp,
+    fontSize = 16.sp,
 )
 
 private val SettingsButtonStyle = TextStyle(

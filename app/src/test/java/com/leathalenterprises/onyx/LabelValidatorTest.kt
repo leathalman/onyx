@@ -85,6 +85,20 @@ class LabelValidatorTest {
     }
 
     @Test
+    fun `singular and plural labels count as a collision`() {
+        val requests = listOf(
+            req("com.ubercab", "Uber"),
+            req("com.waymo.carapp", "Waymo One"),
+        )
+        val finals = LabelValidator.finalize(
+            requests,
+            mapOf("com.ubercab" to "Map", "com.waymo.carapp" to "Maps"),
+        )
+        assertEquals("Uber", finals["com.ubercab"])
+        assertEquals("Waymo One", finals["com.waymo.carapp"])
+    }
+
+    @Test
     fun `collision detection is case insensitive`() {
         val requests = listOf(
             req("com.ubercab", "Uber"),
